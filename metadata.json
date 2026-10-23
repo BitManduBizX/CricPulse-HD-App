@@ -1,0 +1,6 @@
+{
+  "name": "CricPulse HD",
+  "description": "High-definition cricket platform covering Men's, Women's, International, NPL, T20 leagues, live ball-by-ball commentary, stats, and CricMind Gemini AI assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
