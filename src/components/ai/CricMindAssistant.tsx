@@ -57,11 +57,12 @@ export const CricMindAssistant: React.FC<CricMindAssistantProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const envApiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
   const [apiKey, setApiKey] = useState<string>(() => {
-    return localStorage.getItem('cricpulse_gemini_key') || '';
+    return localStorage.getItem('cricpulse_gemini_key') || envApiKey || '';
   });
   const [hasConsented, setHasConsented] = useState<boolean>(() => {
-    return localStorage.getItem('cricpulse_ai_consent') === 'true';
+    return localStorage.getItem('cricpulse_ai_consent') === 'true' || Boolean(envApiKey);
   });
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -166,16 +167,45 @@ export const CricMindAssistant: React.FC<CricMindAssistantProps> = ({
 
       setMessages((prev) => [...prev, botResponse]);
     } catch (err: any) {
-      console.warn('Backend proxy fetch failed, generating fallback response:', err);
-      // Fallback intelligent response generator
-      let fallbackText = `🏏 **CricMind Cricket Analyst Insight**:\n\nRegarding: **${prompt}**\n\n- **Tactical Perspective**: Modern T20 cricket relies on high boundary percentage (65%+ of team runs) and boundary suppression in death overs.\n- **Nepal Premier League (NPL)**: Nepal's cricket revolution is peaking with the 8 franchise teams at TU Cricket Ground. Fast bowling in morning sessions gets notable seam movement from the Himalayan morning mist!\n- **Pro Tip**: To connect live to Gemini AI with full real-time reasoning, tap the **Settings (⚙️)** icon in the header and paste your free Gemini API key from Google AI Studio.`;
+      console.warn('Backend proxy fetch failed, attempting direct Gemini client call if key available:', err);
+      
+      const activeKey = apiKey || envApiKey;
+      let directAnswer = '';
 
-      if (prompt.toLowerCase().includes('hundred')) {
-        fallbackText = `💯 **The Hundred League Explainer (ECB)**:\n\n- **100 Balls Total**: Each innings consists of 100 legal deliveries.\n- **Flexible Overs**: Bowlers can deliver either 5 or 10 consecutive balls.\n- **End Changes**: Bowling ends swap every 10 balls.\n- **Powerplay**: First 25 balls limit fielders outside the circle to two.\n- **Target Time**: Designed for crisp 2.5-hour broadcast prime-time viewing!`;
-      } else if (prompt.toLowerCase().includes('dls')) {
-        fallbackText = `⚡ **Duckworth-Lewis-Stern (DLS) Method in T20**:\n\n- **Resource Percentage**: DLS treats cricket as a resource game of **Overs remaining** and **Wickets in hand**.\n- If rain stops play in the second innings, the team batting second needs to exceed the 'Par Score' calculated from the resource curves.\n- A minimum of 5 overs per side is required to constitute a valid T20 result!`;
-      } else if (prompt.toLowerCase().includes('prize') || prompt.toLowerCase().includes('npl')) {
-        fallbackText = `🇳🇵 **NPL Season & Prize Purse Summary**:\n\n- **Champions**: रू 1.1 Crore (NPR 11 Million) + Championship Trophy\n- **Runner-Up**: रू 51 Lakh\n- **3rd Place**: रू 25 Lakh\n- **4th Place**: रू 15 Lakh\n- **Venue**: Tribhuvan University (TU) Cricket Ground, Kirtipur, Kathmandu\n- **Franchises**: Biratnagar Kings, Chitwan Rhinos, Janakpur Bolts, Kathmandu Gorkhas, Karnali Yaks, Lumbini Lions, Pokhara Avengers, Sudurpaschim Royals.`;
+      if (activeKey) {
+        try {
+          const directRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${activeKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                role: 'user',
+                parts: [{ text: `You are CricMind AI, chief cricket analyst for CricPulse HD. Knowledgeable about NPL, international cricket, The Hundred, IPL. Answer concisely with markdown stats.\n\nUser Question: ${prompt}` }]
+              }]
+            })
+          });
+
+          if (directRes.ok) {
+            const data = await directRes.json();
+            directAnswer = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          }
+        } catch (directErr) {
+          console.warn('Direct Gemini call error:', directErr);
+        }
+      }
+
+      // Fallback intelligent response generator if direct call didn't yield text
+      let fallbackText = directAnswer;
+      if (!fallbackText) {
+        fallbackText = `🏏 **CricMind Cricket Analyst Insight**:\n\nRegarding: **${prompt}**\n\n- **Tactical Perspective**: Modern T20 cricket relies on high boundary percentage (65%+ of team runs) and boundary suppression in death overs.\n- **Nepal Premier League (NPL)**: Nepal's cricket revolution is peaking with the 8 franchise teams at TU Cricket Ground. Fast bowling in morning sessions gets notable seam movement from the Himalayan morning mist!\n- **Pro Tip**: To connect live to Gemini AI with full real-time reasoning, tap the **Settings (⚙️)** icon in the header and paste your free Gemini API key from Google AI Studio.`;
+
+        if (prompt.toLowerCase().includes('hundred')) {
+          fallbackText = `💯 **The Hundred League Explainer (ECB)**:\n\n- **100 Balls Total**: Each innings consists of 100 legal deliveries.\n- **Flexible Overs**: Bowlers can deliver either 5 or 10 consecutive balls.\n- **End Changes**: Bowling ends swap every 10 balls.\n- **Powerplay**: First 25 balls limit fielders outside the circle to two.\n- **Target Time**: Designed for crisp 2.5-hour broadcast prime-time viewing!`;
+        } else if (prompt.toLowerCase().includes('dls')) {
+          fallbackText = `⚡ **Duckworth-Lewis-Stern (DLS) Method in T20**:\n\n- **Resource Percentage**: DLS treats cricket as a resource game of **Overs remaining** and **Wickets in hand**.\n- If rain stops play in the second innings, the team batting second needs to exceed the 'Par Score' calculated from the resource curves.\n- A minimum of 5 overs per side is required to constitute a valid T20 result!`;
+        } else if (prompt.toLowerCase().includes('prize') || prompt.toLowerCase().includes('npl')) {
+          fallbackText = `🇳🇵 **NPL Season & Prize Purse Summary**:\n\n- **Champions**: रू 1.1 Crore (NPR 11 Million) + Championship Trophy\n- **Runner-Up**: रू 51 Lakh\n- **3rd Place**: रू 25 Lakh\n- **4th Place**: रू 15 Lakh\n- **Venue**: Tribhuvan University (TU) Cricket Ground, Kirtipur, Kathmandu\n- **Franchises**: Biratnagar Kings, Chitwan Rhinos, Janakpur Bolts, Kathmandu Gorkhas, Karnali Yaks, Lumbini Lions, Pokhara Avengers, Sudurpaschim Royals.`;
+        }
       }
 
       const botFallback: ChatMessage = {
@@ -183,7 +213,7 @@ export const CricMindAssistant: React.FC<CricMindAssistantProps> = ({
         role: 'model',
         content: fallbackText,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        mode: 'demo_fallback'
+        mode: directAnswer ? 'gemini' : 'demo_fallback'
       };
       setMessages((prev) => [...prev, botFallback]);
     } finally {
